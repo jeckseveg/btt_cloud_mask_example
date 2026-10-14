@@ -65,7 +65,9 @@ Some items also carry Maxar cloud/shadow/water/etc. masks (~10%, in a handful of
 6. **Many UTM zones** (`proj:epsg` per item). Write masks in each tile's own CRS and grid.
 7. Minor metadata inconsistencies: five 2021–22 events lack the `raster` extension and `grid:code`;
    six WV01 items have an undocumented `hd: true`; WV04 item ids are UUIDs (`…-inv`).
-8. The same location appears in several acquisitions (shared quadkey). If students split
+8. **Some listed assets do not exist.** In `volcano-indonesia21`, items list `ms_analytic`, `pan_analytic`
+   and the masks, but only `visual` is hosted (the rest return HTTP 404). Expect occasional broken items.
+9. The same location appears in several acquisitions (shared quadkey). If students split
    train/test, split by location or acquisition rather than by tile to avoid leakage.
 
 Image dates and event context are not relevant to this package.
