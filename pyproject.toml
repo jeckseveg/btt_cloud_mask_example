@@ -3,9 +3,9 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "example_cloud_detector"
+name = "btt_cloud_mask_example"
 version = "0.1.0"
-description = "Prebuilt cloud detectors that read imagery from a public STAC collection and write cloud masks."
+description = "Reference cloud masks for Maxar Open Data imagery from prebuilt models (OmniCloudMask, ukis-csmask, CloudSEN12)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -14,32 +14,44 @@ authors = [{ name = "Jack Savage" }]
 keywords = ["cloud detection", "remote sensing", "stac", "satellite imagery"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
+    "matplotlib>=3.7",
     "numpy>=1.24",
+    "omnicloudmask>=1.7",
     "pystac>=1.8",
     "rasterio>=1.3",
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]
-omnicloudmask = ["omnicloudmask>=1.7"]
 ukis = ["ukis-csmask[cpu]>=1.0"]
-# cloudsen12_models imports matplotlib without declaring it
-cloudsen12 = ["cloudsen12_models>=1.0", "matplotlib"]
-all = ["example_cloud_detector[omnicloudmask,ukis,cloudsen12]"]
+cloudsen12 = ["cloudsen12_models>=1.0"]
+all = ["btt_cloud_mask_example[ukis,cloudsen12]"]
 dev = ["pytest>=8", "build", "twine"]
 
 [project.scripts]
-cloud-detect = "example_cloud_detector.cli:main"
+cloud-detect = "btt_cloud_mask_example.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/jeckseveg/example-cloud-detector-package"
-Issues = "https://github.com/jeckseveg/example-cloud-detector-package/issues"
+Homepage = "https://github.com/jeckseveg/btt_cloud_mask_example"
+Issues = "https://github.com/jeckseveg/btt_cloud_mask_example/issues"
+Documentation = "https://github.com/jeckseveg/btt_cloud_mask_example#readme"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/example_cloud_detector"]
+packages = ["src/btt_cloud_mask_example"]
+
+# Only ship the package, its tests and the files PyPI needs; scripts/ and docs/ stay out.
+[tool.hatch.build.targets.sdist]
+include = ["src/btt_cloud_mask_example", "tests", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

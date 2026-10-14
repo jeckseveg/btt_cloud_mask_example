@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import rasterio
 
-from example_cloud_detector.raster import pick_asset, read_scene, to_source_grid, write_mask
+from btt_cloud_mask_example.raster import pick_asset, read_scene, to_source_grid, write_mask
 
 
 def test_pick_asset_by_common_name(ms_item):
@@ -31,3 +31,10 @@ def test_read_resampled_and_back(ms_item, tmp_path):
     path = write_mask(tmp_path / "m.tif", back, scene.source_transform, scene.crs)
     with rasterio.open(path) as ds:
         assert ds.dtypes[0] == "uint8" and ds.nodata == 0 and ds.tags(1)["class_2"] == "cloud"
+
+
+def test_scene_select(ms_item):
+    scene = read_scene(ms_item, ("blue", "green", "red", "nir08"))
+    sub = scene.select(("nir08", "red"))
+    assert sub.bands == ["nir08", "red"] and (sub.data[0] == scene.band("nir08")).all()
+    assert sub.valid is scene.valid and sub.asset == scene.asset

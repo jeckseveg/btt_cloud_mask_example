@@ -8,3 +8,4 @@ dist/
 data/
 *.tif
 scripts/
+.claude/

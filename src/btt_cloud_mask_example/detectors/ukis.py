@@ -7,8 +7,8 @@ import warnings
 
 import numpy as np
 
-from example_cloud_detector.detectors.base import Detector
-from example_cloud_detector.raster import CLEAR, CLOUD, SHADOW
+from btt_cloud_mask_example.detectors.base import Detector
+from btt_cloud_mask_example.raster import CLEAR, CLOUD, SHADOW
 
 
 class UkisCSmask(Detector):

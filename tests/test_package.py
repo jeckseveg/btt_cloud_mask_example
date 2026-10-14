@@ -1,9 +1,9 @@
-import example_cloud_detector
-from example_cloud_detector.cli import main
+import btt_cloud_mask_example
+from btt_cloud_mask_example.cli import main
 
 
 def test_version():
-    assert example_cloud_detector.__version__ == "0.1.0"
+    assert btt_cloud_mask_example.__version__ == "0.1.0"
 
 
 def test_cli_version(capsys):

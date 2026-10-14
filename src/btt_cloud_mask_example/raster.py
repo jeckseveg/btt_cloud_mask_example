@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import rasterio
@@ -38,6 +38,10 @@ class Scene:
     def band(self, name):
         return self.data[self.bands.index(name)]
 
+    def select(self, bands):
+        """Return a copy of this scene with only `bands`, in that order (for sharing one read)."""
+        return replace(self, data=np.stack([self.band(b) for b in bands]), bands=list(bands))
+
 
 # GDAL settings for reading remote COGs: fewer, larger HTTP range requests.
 REMOTE_GDAL_ENV = dict(
@@ -68,7 +72,10 @@ def pick_asset(item, wanted):
     """Return (asset_key, {band: index}) for the first asset that has every band in `wanted`.
 
     Falls back to the panchromatic asset (as every requested band) for pan-only sensors such as WV01.
+    Asking only for "pan" always reads the panchromatic asset.
     """
+    if set(wanted) == {"pan"} and "pan_analytic" in item.assets:
+        return "pan_analytic", {"pan": 1}
     for key in ("ms_analytic",):
         if key in item.assets:
             idx = band_indexes(item, key)

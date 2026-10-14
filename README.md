@@ -1,72 +1,132 @@
-# example_cloud_detector
+# btt_cloud_mask_example
 
-Prebuilt cloud detectors that read imagery from a public STAC collection and write cloud masks.
+Reference cloud masks for satellite images, so you can check how well **your** cloud-detection
+model does.
+
+The images come from [Maxar Open Data](https://www.maxar.com/open-data): very high resolution
+(about 0.3–3.5 m) imagery of natural disasters, published as a free
+[STAC catalog](https://browser.moregeo.it/external/maxar-opendata.s3.amazonaws.com/events/catalog.json).
+The masks come from pretrained cloud models, [OmniCloudMask](https://github.com/DPIRD-DMA/OmniCloudMask)
+by default.
 
 ## Install
 
-The cloud models are optional extras, so install the ones you want:
-
 ```bash
-pip install "example_cloud_detector[omnicloudmask]"   # or [ukis], [cloudsen12], [all]
-pip install -e ".[all,dev]"                           # from a clone, for development
+pip install btt_cloud_mask_example
 ```
 
-| Detector | Extra | Bands used | Licence |
-|----------|-------|------------|---------|
-| `omnicloudmask` | `[omnicloudmask]` | red, green, NIR (pan-only WV01 supported, experimental) | MIT |
+This includes OmniCloudMask. Two more models are optional:
+
+```bash
+pip install "btt_cloud_mask_example[all]"     # adds ukis-csmask and CloudSEN12
+```
+
+The first mask you make downloads OmniCloudMask's model weights (about 55 MB).
+
+## Quickstart
+
+```python
+import btt_cloud_mask_example as bcm
+
+# 1. Find some cloudy images from a disaster event
+urls = bcm.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
+
+# 2. Load an image: reflectance values from 0 to 1, shaped (bands, height, width)
+image = bcm.load_image(urls[0])              # bands: red, green, blue, nir
+image.data.shape                             # e.g. (4, 2868, 2868)
+image.plot()
+
+# 3. Make a reference cloud mask for the same image
+mask = bcm.create_mask(urls[0])
+mask.cloud_fraction                          # e.g. 0.37 (share of pixels that are cloud)
+mask.plot(image)                             # image and mask side by side
+
+# 4. Compare your model's prediction against the reference
+my_prediction = my_model(image.data)         # True/False, 0/1 or probabilities, shaped (height, width)
+bcm.compare(my_prediction, mask)
+# e.g. {'iou': 0.71, 'precision': 0.93, 'recall': 0.75, 'f1': 0.83, 'accuracy': 0.91, ...}
+```
+
+`load_image` and `create_mask` use the same pixel grid, so `image.data[:, y, x]` and
+`mask.data[y, x]` are the same spot on the ground.
+
+### What's in a mask
+
+`mask.data` is a numpy array with one number per pixel:
+
+| Value | Meaning |
+|------:|---------|
+| 0 | no data (the empty edges of an image) |
+| 1 | clear |
+| 2 | cloud |
+| 3 | cloud shadow |
+
+`mask.cloud` gives a True/False array of just the cloud. `mask.save("mask.tif")` writes a
+GeoTIFF that opens in QGIS.
+
+### Useful options
+
+```python
+bcm.find_images(event, n=10, min_cloud=10, max_cloud=60, sensors=["WV02", "WV03"])
+bcm.load_image(url, bands=["red", "green", "blue", "nir", "rededge"])   # pick bands
+bcm.load_image(url, resolution=10)                 # resample to 10 m pixels (smaller, faster)
+bcm.create_mask(url, resolution=10)                # ...and a mask on the same 10 m grid
+bcm.create_mask(url, model="ukis")                 # another model, for comparison
+bcm.create_mask(url, save_to="masks/one.tif")
+```
+
+Event names (like `Hurricane-Ian-9-26-2022`) are listed in the
+[catalog browser](https://browser.moregeo.it/external/maxar-opendata.s3.amazonaws.com/events/catalog.json).
+You can also pass a link copied from the browser straight into `load_image` or `create_mask`.
+
+### Bands
+
+| Name | WorldView-2/3 (WV02, WV03) | GeoEye-1 (GE01), WorldView-4 (WV04) |
+|------|:--:|:--:|
+| `coastal`, `yellow`, `rededge`, `nir2` | ✓ | |
+| `blue`, `green`, `red`, `nir` | ✓ | ✓ |
+
+WorldView-1 (WV01) images are black-and-white only: load them with `bands=["pan"]`.
+`find_images` skips them unless you ask for `sensors=["WV01", ...]`.
+
+## Command line
+
+```bash
+cloud-detect find Hurricane-Ian-9-26-2022 --n 3 --min-cloud 20     # prints image URLs
+cloud-detect mask <url> [<url> ...] --out masks                      # writes GeoTIFF masks
+cloud-detect mask <url> --model ukis --resolution 10
+```
+
+## The models
+
+| Model | Install | Uses | Licence |
+|-------|---------|------|---------|
+| `omnicloudmask` (default) | included | red, green, NIR | MIT |
 | `ukis` | `[ukis]` | blue, green, red, NIR | Apache-2.0 |
 | `cloudsen12` | `[cloudsen12]` | NIR, red, green, blue | LGPL-3.0 code, CC-BY-NC-4.0 weights |
 
-All masks use the same classes: 0 nodata, 1 clear, 2 cloud, 3 cloud shadow.
+None of them was trained on Maxar imagery. Compared with Maxar's own cloud masks on 34 cloudy
+images, OmniCloudMask agreed best (cloud IoU 0.83, F1 0.90), ahead of CloudSEN12 (0.72) and
+ukis (0.71). Treat the masks as a strong baseline, not ground truth. Details are in
+[docs/DETECTORS.md](https://github.com/jeckseveg/btt_cloud_mask_example/blob/main/docs/DETECTORS.md);
+data quirks are in [docs/DATA.md](https://github.com/jeckseveg/btt_cloud_mask_example/blob/main/docs/DATA.md).
 
-## Usage
+## Data licence
 
-Works with static STAC catalogs (and STAC Browser links to them). The default example source is
-[Maxar Open Data](https://maxar-opendata.s3.amazonaws.com/events/catalog.json), where each
-disaster event is a child collection.
+Maxar Open Data imagery is licensed [CC-BY-NC-4.0](https://creativecommons.org/licenses/by-nc/4.0/)
+(non-commercial). This package reads it from Maxar's servers and does not redistribute it.
 
-```bash
-# List cloudy multispectral tiles from one event without downloading
-cloud-detect fetch https://maxar-opendata.s3.amazonaws.com/events/catalog.json \
-    Hurricane-Ian-9-26-2022 --platform WV02 WV03 GE01 --min-cloud 20 \
-    --assets ms_analytic --max-items 4 --dry-run
+## For developers
 
-# Download them (drop --dry-run); files land in data/<item id>/
-
-# Write cloud masks (one COG per item, on the source imagery grid)
-cloud-detect run omnicloudmask data/*/ --out masks
-cloud-detect run ukis data/*/ --res 10         # run the model at 10 m instead of source resolution
-```
-
-`run` also accepts item URLs, so imagery can be read straight from the catalog without downloading.
-
-```python
-from example_cloud_detector.stac import find_items, download_assets
-
-items = find_items(catalog_url, "Hurricane-Ian-9-26-2022", platforms=["WV02"],
-                   min_cloud=20, required_assets=["ms_analytic"], max_items=4)
-for item in items:
-    download_assets(item, "data", ["ms_analytic", "data-mask"])
-
-from example_cloud_detector.pipeline import detect_item
-from example_cloud_detector.detectors import get_detector
-
-detector = get_detector("omnicloudmask")               # source resolution; res=10 for 10 m
-detect_item(items[0], detector, "masks")               # -> masks/<item id>_omnicloudmask.tif
-```
-
-Maxar `ms_analytic` assets are 8-band uint16 GeoTIFFs (coastal, blue, green, yellow, red,
-red edge, nir08, nir09) at ~1.85 m; `tile:clouds_percent` gives per-tile cloud cover.
-
-See [docs/DATA.md](docs/DATA.md) for sensors, bands, formats and data gotchas, and
-[docs/DETECTORS.md](docs/DETECTORS.md) for how the detectors compare.
-
-**Data license:** Maxar Open Data imagery is CC-BY-NC-4.0. This package does not redistribute it.
-
-## Development
+The friendly functions above are built on a lower-level layer you can use directly:
+`btt_cloud_mask_example.stac` (search and download from any static STAC catalog),
+`.raster` (reading bands, writing masks), `.detectors` (the model wrappers) and `.pipeline`.
+The `cloud-detect fetch` and `cloud-detect run` commands expose the same layer.
 
 ```bash
+git clone https://github.com/jeckseveg/btt_cloud_mask_example
+cd btt_cloud_mask_example
+pip install -e ".[all,dev]"
 pytest
-python -m build          # builds sdist + wheel into dist/
-twine check dist/*
+python -m build && twine check dist/*
 ```

@@ -5,14 +5,14 @@ Sensor-agnostic model trained on Sentinel-2; needs red, green and NIR. Designed 
 
 import numpy as np
 
-from example_cloud_detector.detectors.base import Detector
-from example_cloud_detector.raster import CLEAR, CLOUD, SHADOW
+from btt_cloud_mask_example.detectors.base import Detector
+from btt_cloud_mask_example.raster import CLEAR, CLOUD, SHADOW
 
 
 class OmniCloudMask(Detector):
     name = "omnicloudmask"
     bands = ("red", "green", "nir08")
-    extra = "omnicloudmask"
+    extra = ""  # installed by default
     module = "omnicloudmask"
     supports_pan = True
 

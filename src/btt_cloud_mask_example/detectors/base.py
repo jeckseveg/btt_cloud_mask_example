@@ -6,7 +6,7 @@ import importlib
 
 import numpy as np
 
-from example_cloud_detector.raster import CLEAR, CLOUD, NODATA, Scene
+from btt_cloud_mask_example.raster import CLEAR, CLOUD, NODATA, Scene
 
 
 class Detector:
@@ -31,9 +31,11 @@ class Detector:
         try:
             return importlib.import_module(self.module)
         except ImportError as err:
+            if not self.extra:
+                raise ImportError(f"The '{self.name}' model is missing; reinstall: pip install btt_cloud_mask_example") from err
             raise ImportError(
-                f"The '{self.name}' detector needs extra packages: "
-                f"pip install 'example_cloud_detector[{self.extra}]'"
+                f"The '{self.name}' model needs extra packages: "
+                f"pip install \"btt_cloud_mask_example[{self.extra}]\""
             ) from err
 
     def predict(self, scene: Scene) -> np.ndarray:

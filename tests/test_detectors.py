@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from example_cloud_detector.detectors import DETECTORS, Detector, get_detector
-from example_cloud_detector.raster import CLEAR, CLOUD, NODATA, read_scene
+from btt_cloud_mask_example.detectors import DETECTORS, Detector, get_detector
+from btt_cloud_mask_example.raster import CLEAR, CLOUD, NODATA, read_scene
 
 
 class AllCloud(Detector):
@@ -51,7 +51,7 @@ def test_real_models_on_synthetic_tile(name, ms_item):
 def test_detect_item_writes_source_grid_mask(ms_item, tmp_path, monkeypatch):
     import rasterio
 
-    from example_cloud_detector import detectors, pipeline
+    from btt_cloud_mask_example import detectors, pipeline
 
     monkeypatch.setattr(pipeline, "get_detector", lambda name: AllCloud(res=8.0))
     out = pipeline.detect_item(ms_item, "allcloud", tmp_path / "masks")
