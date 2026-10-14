@@ -1,9 +1,16 @@
+import re
+from pathlib import Path
+
 import btt_cloud_mask_example
 from btt_cloud_mask_example.cli import main
 
+PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 
-def test_version():
-    assert btt_cloud_mask_example.__version__ == "0.1.0"
+
+def test_version_matches_pyproject():
+    # The version lives in two places; keep them in sync.
+    declared = re.search(r'^version = "(.+)"', PYPROJECT.read_text(), re.M).group(1)
+    assert btt_cloud_mask_example.__version__ == declared
 
 
 def test_cli_version(capsys):
@@ -11,7 +18,7 @@ def test_cli_version(capsys):
         main(["--version"])
     except SystemExit:
         pass
-    assert "0.1.0" in capsys.readouterr().out
+    assert btt_cloud_mask_example.__version__ in capsys.readouterr().out
 
 
 def test_run_continues_after_failed_item(ms_item, tmp_path, capsys):
