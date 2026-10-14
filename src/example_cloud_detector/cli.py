@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from example_cloud_detector import __version__
 from example_cloud_detector.stac import download_assets, find_items
@@ -18,7 +19,19 @@ def main(argv=None):
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    fetch = sub.add_parser("fetch", help="Download items from a STAC catalog")
+    find = sub.add_parser("find", help="List image URLs from a Maxar Open Data event")
+    find.add_argument("event", help="Event name, e.g. Hurricane-Ian-9-26-2022")
+    find.add_argument("--n", type=int, default=5, help="How many images (default 5)")
+    find.add_argument("--min-cloud", type=float, help="Minimum cloud cover, 0-100")
+    find.add_argument("--max-cloud", type=float, help="Maximum cloud cover, 0-100")
+
+    mask = sub.add_parser("mask", help="Make a cloud mask GeoTIFF for each image URL")
+    mask.add_argument("images", nargs="+", help="Image URLs (from `cloud-detect find`) or downloaded folders")
+    mask.add_argument("--model", default="omnicloudmask", help="omnicloudmask (default), ukis or cloudsen12")
+    mask.add_argument("--resolution", type=float, help="Pixel size in metres (default: the image's own)")
+    mask.add_argument("--out", default="masks", help="Folder for the GeoTIFFs (default: masks)")
+
+    fetch = sub.add_parser("fetch", help="Advanced: download items from any static STAC catalog")
     fetch.add_argument("catalog_url", help="Catalog URL (STAC Browser links are accepted)")
     fetch.add_argument("collection", nargs="?", help="Child collection id, e.g. an event")
     fetch.add_argument("--platform", nargs="*", help="e.g. WV02 WV03 GE01")
@@ -29,7 +42,7 @@ def main(argv=None):
     fetch.add_argument("--out", default="data")
     fetch.add_argument("--dry-run", action="store_true", help="List matches without downloading")
 
-    run = sub.add_parser("run", help="Write cloud masks for STAC items")
+    run = sub.add_parser("run", help="Advanced: write cloud masks on the source grid with detector options")
     run.add_argument("detector", choices=DETECTOR_NAMES)
     run.add_argument("items", nargs="+", help="item.json files, directories containing one, or item URLs")
     run.add_argument("--res", type=_res, default="default",
@@ -42,6 +55,26 @@ def main(argv=None):
                      help="Cloud darker than this mean visible reflectance becomes clear (0 disables)")
 
     args = parser.parse_args(argv)
+    if args.command in ("find", "mask"):
+        from example_cloud_detector.api import CloudMaskError, create_mask, find_images
+
+        try:
+            if args.command == "find":
+                print("\n".join(find_images(args.event, args.n, args.min_cloud, args.max_cloud)))
+                return
+            failed = 0
+            for image in args.images:
+                try:
+                    m = create_mask(image, args.model, args.resolution)
+                    path = m.save(Path(args.out) / f"{m.item.id.replace('/', '_')}_{m.model}.tif")
+                    print(f"{path}  cloud {100 * m.cloud_fraction:.1f}%  shadow {100 * m.shadow_fraction:.1f}%")
+                except CloudMaskError as err:
+                    failed += 1
+                    print(f"skipped {image}: {err}", file=sys.stderr)
+            if failed:
+                sys.exit(f"{failed} of {len(args.images)} images skipped")
+        except CloudMaskError as err:
+            sys.exit(str(err))
     if args.command == "run":
         from example_cloud_detector.detectors import get_detector
         from example_cloud_detector.pipeline import detect_item

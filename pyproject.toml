@@ -3,9 +3,9 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "example_cloud_detector"
+name = "btt_cloud_mask_example"
 version = "0.1.0"
-description = "Prebuilt cloud detectors that read imagery from a public STAC collection and write cloud masks."
+description = "Reference cloud masks for Maxar Open Data imagery from prebuilt models (OmniCloudMask, ukis-csmask, CloudSEN12)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -18,17 +18,18 @@ classifiers = [
     "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = [
+    "matplotlib>=3.7",
     "numpy>=1.24",
+    "omnicloudmask>=1.7",
     "pystac>=1.8",
     "rasterio>=1.3",
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]
-omnicloudmask = ["omnicloudmask>=1.7"]
 ukis = ["ukis-csmask[cpu]>=1.0"]
-# cloudsen12_models imports matplotlib without declaring it
-cloudsen12 = ["cloudsen12_models>=1.0", "matplotlib"]
-all = ["example_cloud_detector[omnicloudmask,ukis,cloudsen12]"]
+cloudsen12 = ["cloudsen12_models>=1.0"]
+all = ["btt_cloud_mask_example[ukis,cloudsen12]"]
 dev = ["pytest>=8", "build", "twine"]
 
 [project.scripts]

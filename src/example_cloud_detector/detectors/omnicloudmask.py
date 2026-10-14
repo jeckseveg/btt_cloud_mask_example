@@ -12,7 +12,7 @@ from example_cloud_detector.raster import CLEAR, CLOUD, SHADOW
 class OmniCloudMask(Detector):
     name = "omnicloudmask"
     bands = ("red", "green", "nir08")
-    extra = "omnicloudmask"
+    extra = ""  # installed by default
     module = "omnicloudmask"
     supports_pan = True
 

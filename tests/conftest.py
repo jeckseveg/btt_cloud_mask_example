@@ -46,3 +46,50 @@ def ms_item(tmp_path):
 @pytest.fixture
 def pan_item(tmp_path):
     return make_item(tmp_path, ms=False)
+
+
+def _write(path, obj):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj))
+
+
+def _item(item_id, platform, cloud, assets):
+    return {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "id": item_id,
+        "geometry": None,
+        "properties": {
+            "datetime": "2022-01-01T00:00:00Z",
+            "platform": platform,
+            "tile:clouds_percent": cloud,
+        },
+        "links": [],
+        "assets": {k: {"href": f"./{item_id}-{k}.tif"} for k in assets},
+    }
+
+
+@pytest.fixture
+def catalog(tmp_path):
+    """root -> event -> acquisition -> items, mirroring the Maxar Open Data layout."""
+    _write(tmp_path / "catalog.json", {"type": "Catalog", "id": "root", "links": [
+        {"rel": "child", "href": "./event-a/collection.json"},
+        {"rel": "child", "href": "./event-b/collection.json"},
+    ]})
+    _write(tmp_path / "event-b/collection.json", {"type": "Collection", "id": "event-b", "links": []})
+    _write(tmp_path / "event-a/collection.json", {"type": "Collection", "id": "event-a", "links": [
+        {"rel": "child", "href": "./acq/acq1.json"},
+    ]})
+    items = [
+        _item("pan-cloudy", "WV01", 40, ["pan_analytic"]),
+        _item("ms-clear", "WV02", 0, ["ms_analytic", "pan_analytic"]),
+        _item("ms-cloudy", "WV03", 55, ["ms_analytic", "pan_analytic"]),
+    ]
+    _write(tmp_path / "event-a/acq/acq1.json", {"type": "Collection", "id": "acq1", "links": [
+        {"rel": "item", "href": f"../items/{i['id']}.json"} for i in items
+    ]})
+    for i in items:
+        _write(tmp_path / f"event-a/items/{i['id']}.json", i)
+        for key in i["assets"]:
+            (tmp_path / f"event-a/items/{i['id']}-{key}.tif").write_bytes(b"tif")
+    return tmp_path / "catalog.json"

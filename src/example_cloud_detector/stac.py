@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import ssl
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urljoin
@@ -23,9 +24,13 @@ def normalize_url(url):
     return url
 
 
+# One TLS context for all requests: building a new one per request costs ~0.5 s of CPU.
+_SSL_CONTEXT = ssl.create_default_context()
+
+
 def _read_json(href):
     if href.startswith(("http://", "https://")):
-        with urlopen(href, timeout=60) as resp:
+        with urlopen(href, timeout=60, context=_SSL_CONTEXT) as resp:
             return json.load(resp)
     return json.loads(Path(href).read_text())
 
@@ -34,8 +39,28 @@ def _links(obj, rel, base):
     return [urljoin(base, link["href"]) for link in obj.get("links", []) if link["rel"] == rel]
 
 
-def _matches(item, platforms, min_cloud, max_cloud, required_assets):
+def data_coverage(item):
+    """Fraction of a Maxar tile that holds image data, from `tile:data_area` (km2).
+
+    The full tile size comes from an asset's `proj:shape` and pixel size; the item's
+    `proj:bbox` can't be used because it only bounds the data, not the whole tile.
+    """
+    area = item.properties.get("tile:data_area")
+    if area is None:
+        return None
+    for asset in item.assets.values():
+        shape, transform = asset.extra_fields.get("proj:shape"), asset.extra_fields.get("proj:transform")
+        if shape and transform:
+            tile_km2 = shape[0] * abs(transform[4]) * shape[1] * abs(transform[0]) / 1e6
+            return min(1.0, area / tile_km2) if tile_km2 else None
+    return None
+
+
+def _matches(item, platforms, min_cloud, max_cloud, required_assets, min_coverage=None):
     props = item.properties
+    coverage = data_coverage(item) if min_coverage is not None else None
+    if coverage is not None and coverage < min_coverage:  # unknown coverage is not filtered
+        return False
     if platforms and props.get("platform") not in platforms:
         return False
     cloud = props.get("tile:clouds_percent", props.get("eo:cloud_cover"))
@@ -56,40 +81,49 @@ def find_items(
     min_cloud=None,
     max_cloud=None,
     required_assets=None,
+    min_coverage=None,
     max_items=10,
     workers=16,
 ):
     """Return up to `max_items` pystac Items matching the filters.
 
-    Works on static catalogs by walking child/item links breadth-first, fetching
-    item JSON in parallel. `collection` is the id of a direct child of the root
-    (e.g. a Maxar Open Data event); omit it to walk the whole catalog. Cloud
-    filters use `tile:clouds_percent`, falling back to `eo:cloud_cover`.
+    Works on static catalogs by walking child/item links depth-first (so the first matches
+    arrive quickly), fetching item JSON in parallel. `collection` is the id of a direct child
+    of the root (e.g. a Maxar Open Data event); omit it to walk the whole catalog. Cloud
+    filters use `tile:clouds_percent`, falling back to `eo:cloud_cover`. `min_coverage`
+    (0-1) skips mostly-empty edge tiles, using Maxar's `tile:data_area`.
     """
     root_href = normalize_url(catalog_url)
     root = _read_json(root_href)
-    if collection is not None:
-        children = [(href, _read_json(href)) for href in _links(root, "child", root_href)]
-        matches = [(href, c) for href, c in children if c.get("id") == collection]
-        if not matches:
-            raise ValueError(f"No child '{collection}' in {root_href}")
-        root_href, root = matches[0]
-
-    found = []
-    queue = [(root_href, root)]
     with ThreadPoolExecutor(workers) as pool:
-        while queue and len(found) < max_items:
-            href, node = queue.pop(0)
+        if collection is not None:
+            root_href, root = _find_child(root, root_href, collection, pool)
+
+        found = []
+        stack = [(root_href, root)]
+        while stack and len(found) < max_items:
+            href, node = stack.pop()
             item_hrefs = _links(node, "item", href)
             for item_href, data in zip(item_hrefs, pool.map(_read_json, item_hrefs)):
                 item = pystac.Item.from_dict(data, href=item_href)
-                if _matches(item, platforms, min_cloud, max_cloud, required_assets):
+                if _matches(item, platforms, min_cloud, max_cloud, required_assets, min_coverage):
                     found.append(item)
                     if len(found) >= max_items:
                         break
             child_hrefs = _links(node, "child", href)
-            queue.extend(zip(child_hrefs, pool.map(_read_json, child_hrefs)))
+            stack.extend(reversed(list(zip(child_hrefs, pool.map(_read_json, child_hrefs)))))
     return found
+
+
+def _find_child(root, root_href, child_id, pool):
+    """Return (href, json) of the root's child with id `child_id`, guessing from the path first."""
+    hrefs = _links(root, "child", root_href)
+    likely = [h for h in hrefs if f"/{child_id}/" in h]
+    for candidates in (likely, hrefs):
+        for href, child in zip(candidates, pool.map(_read_json, candidates)):
+            if child.get("id") == child_id:
+                return href, child
+    raise ValueError(f"No child '{child_id}' in {root_href}")
 
 
 def download_assets(item, out_dir, asset_keys=None):
