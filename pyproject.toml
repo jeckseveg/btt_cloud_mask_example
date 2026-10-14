@@ -35,7 +35,8 @@ dev = ["pytest>=8", "build", "twine"]
 cloud-detect = "example_cloud_detector.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/example-cloud-detector-package"
+Homepage = "https://github.com/jeckseveg/example-cloud-detector-package"
+Issues = "https://github.com/jeckseveg/example-cloud-detector-package/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/example_cloud_detector"]
