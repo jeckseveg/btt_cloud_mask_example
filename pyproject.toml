@@ -3,7 +3,7 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "example-cloud-detector"
+name = "example_cloud_detector"
 version = "0.1.0"
 description = "Prebuilt cloud detectors that read imagery from a public STAC collection and write cloud masks."
 readme = "README.md"

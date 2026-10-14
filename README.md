@@ -1,11 +1,11 @@
-# example-cloud-detector
+# example_cloud_detector
 
 Prebuilt cloud detectors that read imagery from a public STAC collection and write cloud masks.
 
 ## Install
 
 ```bash
-pip install example-cloud-detector          # once published
+pip install example_cloud_detector          # once published
 pip install -e ".[dev]"                     # from a clone, for development
 ```
 
