@@ -108,7 +108,8 @@ cloud-detect mask <url> --model ukis --resolution 10
 None of them was trained on Maxar imagery. Compared with Maxar's own cloud masks on 34 cloudy
 images, OmniCloudMask agreed best (cloud IoU 0.83, F1 0.90), ahead of CloudSEN12 (0.72) and
 ukis (0.71). Treat the masks as a strong baseline, not ground truth. Details are in
-[docs/DETECTORS.md](docs/DETECTORS.md); data quirks are in [docs/DATA.md](docs/DATA.md).
+[docs/DETECTORS.md](https://github.com/jeckseveg/btt_cloud_mask_example/blob/main/docs/DETECTORS.md);
+data quirks are in [docs/DATA.md](https://github.com/jeckseveg/btt_cloud_mask_example/blob/main/docs/DATA.md).
 
 ## Data licence
 

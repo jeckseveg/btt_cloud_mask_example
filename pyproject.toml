@@ -14,6 +14,12 @@ authors = [{ name = "Jack Savage" }]
 keywords = ["cloud detection", "remote sensing", "stac", "satellite imagery"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering :: GIS",
 ]
@@ -38,6 +44,7 @@ cloud-detect = "btt_cloud_mask_example.cli:main"
 [project.urls]
 Homepage = "https://github.com/jeckseveg/btt_cloud_mask_example"
 Issues = "https://github.com/jeckseveg/btt_cloud_mask_example/issues"
+Documentation = "https://github.com/jeckseveg/btt_cloud_mask_example#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/btt_cloud_mask_example"]
