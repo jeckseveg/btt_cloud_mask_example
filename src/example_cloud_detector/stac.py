@@ -93,15 +93,20 @@ def find_items(
 
 
 def download_assets(item, out_dir, asset_keys=None):
-    """Download the selected assets of `item` into `out_dir/<item id>/`. Returns {key: path}."""
+    """Download the selected assets of `item` into `out_dir/<item id>/`. Returns {key: path}.
+
+    Also writes `item.json` alongside, with downloaded assets pointing at the local files and the
+    rest at their absolute remote URLs, so `pystac.Item.from_file` on it works offline where possible.
+    """
     item_dir = Path(out_dir) / item.id.replace("/", "_")
     item_dir.mkdir(parents=True, exist_ok=True)
-    (item_dir / "item.json").write_text(json.dumps(item.to_dict(), indent=1))
+    local = item.clone()
     paths = {}
     for key, asset in item.assets.items():
-        if asset_keys is not None and key not in asset_keys:
-            continue
         href = asset.get_absolute_href()
+        if asset_keys is not None and key not in asset_keys:
+            local.assets[key].href = href
+            continue
         dest = item_dir / (Path(href.split("?")[0]).name or key)
         if not dest.exists():
             tmp = dest.with_suffix(dest.suffix + ".part")
@@ -110,5 +115,8 @@ def download_assets(item, out_dir, asset_keys=None):
             else:
                 shutil.copyfile(href, tmp)
             tmp.rename(dest)
+        local.assets[key].href = f"./{dest.name}"
         paths[key] = dest
+    local.clear_links("self")
+    (item_dir / "item.json").write_text(json.dumps(local.to_dict(include_self_link=False), indent=1))
     return paths

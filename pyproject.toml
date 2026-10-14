@@ -24,6 +24,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+omnicloudmask = ["omnicloudmask>=1.7"]
+ukis = ["ukis-csmask[cpu]>=1.0"]
+# cloudsen12_models imports matplotlib without declaring it
+cloudsen12 = ["cloudsen12_models>=1.0", "matplotlib"]
+all = ["example_cloud_detector[omnicloudmask,ukis,cloudsen12]"]
 dev = ["pytest>=8", "build", "twine"]
 
 [project.scripts]

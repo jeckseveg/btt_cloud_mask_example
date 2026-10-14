@@ -86,3 +86,13 @@ def test_download_assets(catalog, tmp_path):
     assert list(paths) == ["ms_analytic"]
     assert paths["ms_analytic"].read_bytes() == b"tif"
     assert (out / "ms-cloudy" / "item.json").exists()
+
+
+def test_downloaded_item_json_is_self_contained(catalog, tmp_path):
+    import pystac
+
+    (item,) = find_items(str(catalog), "event-a", platforms=["WV03"])
+    download_assets(item, tmp_path / "out", ["ms_analytic"])
+    saved = pystac.Item.from_file(str(tmp_path / "out" / "ms-cloudy" / "item.json"))
+    assert saved.assets["ms_analytic"].get_absolute_href() == str(tmp_path / "out" / "ms-cloudy" / "ms-cloudy-ms_analytic.tif")
+    assert saved.assets["pan_analytic"].get_absolute_href().endswith("event-a/items/ms-cloudy-pan_analytic.tif")
