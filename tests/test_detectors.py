@@ -19,7 +19,7 @@ class AllCloud(Detector):
 def test_registry():
     assert set(DETECTORS) == {"omnicloudmask", "ukis", "cloudsen12"}
     assert get_detector("ukis", res=5).res == 5
-    assert get_detector("omnicloudmask").res == 10
+    assert get_detector("omnicloudmask").res is None  # source resolution by default
     with pytest.raises(ValueError):
         get_detector("nope")
 

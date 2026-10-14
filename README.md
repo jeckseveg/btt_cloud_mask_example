@@ -35,7 +35,7 @@ cloud-detect fetch https://maxar-opendata.s3.amazonaws.com/events/catalog.json \
 
 # Write cloud masks (one COG per item, on the source imagery grid)
 cloud-detect run omnicloudmask data/*/ --out masks
-cloud-detect run ukis data/*/ --res native     # run the model at source resolution
+cloud-detect run ukis data/*/ --res 10         # run the model at 10 m instead of source resolution
 ```
 
 `run` also accepts item URLs, so imagery can be read straight from the catalog without downloading.
@@ -51,14 +51,15 @@ for item in items:
 from example_cloud_detector.pipeline import detect_item
 from example_cloud_detector.detectors import get_detector
 
-detector = get_detector("omnicloudmask", res=10)       # res=None runs at source resolution
+detector = get_detector("omnicloudmask")               # source resolution; res=10 for 10 m
 detect_item(items[0], detector, "masks")               # -> masks/<item id>_omnicloudmask.tif
 ```
 
 Maxar `ms_analytic` assets are 8-band uint16 GeoTIFFs (coastal, blue, green, yellow, red,
 red edge, nir08, nir09) at ~1.85 m; `tile:clouds_percent` gives per-tile cloud cover.
 
-See [docs/DATA.md](docs/DATA.md) for sensors, bands, formats and data gotchas.
+See [docs/DATA.md](docs/DATA.md) for sensors, bands, formats and data gotchas, and
+[docs/DETECTORS.md](docs/DETECTORS.md) for how the detectors compare.
 
 **Data license:** Maxar Open Data imagery is CC-BY-NC-4.0. This package does not redistribute it.
 

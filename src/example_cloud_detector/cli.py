@@ -1,6 +1,7 @@
 """Command-line entry point: `cloud-detect`."""
 
 import argparse
+import sys
 
 from example_cloud_detector import __version__
 from example_cloud_detector.stac import download_assets, find_items
@@ -32,7 +33,7 @@ def main(argv=None):
     run.add_argument("detector", choices=DETECTOR_NAMES)
     run.add_argument("items", nargs="+", help="item.json files, directories containing one, or item URLs")
     run.add_argument("--res", type=_res, default="default",
-                     help="Model resolution in metres, 'native' for source resolution, or 'default'")
+                     help="Model resolution in metres or 'native' (default: native, the source resolution)")
     run.add_argument("--out", default="masks")
     run.add_argument("--model-grid", action="store_true",
                      help="Write masks at the model resolution instead of the source grid")
@@ -49,11 +50,15 @@ def main(argv=None):
         if args.detector != "ukis":
             kwargs["thin_is_cloud"] = not args.thin_is_clear
         detector = get_detector(args.detector, **kwargs)
+        failed = 0
         for item in args.items:
             try:
                 print(detect_item(item, detector, args.out, source_grid=not args.model_grid))
-            except ValueError as err:
-                print(f"skipped {item}: {err}")
+            except Exception as err:  # keep going; one bad item shouldn't stop a batch
+                failed += 1
+                print(f"failed {item}: {err}", file=sys.stderr)
+        if failed:
+            sys.exit(f"{failed} of {len(args.items)} items failed")
     if args.command == "fetch":
         items = find_items(
             args.catalog_url,

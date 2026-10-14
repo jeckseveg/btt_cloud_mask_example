@@ -12,7 +12,7 @@ from example_cloud_detector.raster import CLEAR, CLOUD, NODATA, Scene
 class Detector:
     name: str = ""
     bands: tuple[str, ...] = ()  # eo:bands common names, in the order the model wants
-    default_res: float | None = 10.0  # metres; None means the source resolution
+    default_res: float | None = None  # metres; None means the source resolution
     extra: str = ""  # pip extra that installs the model package
     module: str = ""  # import name of the model package
     supports_pan: bool = False  # can run on pan-only items (WV01)
