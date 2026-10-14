@@ -36,6 +36,8 @@ for item in items:
 Maxar `ms_analytic` assets are 8-band uint16 GeoTIFFs (coastal, blue, green, yellow, red,
 red edge, nir08, nir09) at ~1.85 m; `tile:clouds_percent` gives per-tile cloud cover.
 
+See [docs/DATA.md](docs/DATA.md) for sensors, bands, formats and data gotchas.
+
 **Data license:** Maxar Open Data imagery is CC-BY-NC-4.0. This package does not redistribute it.
 
 ## Development
