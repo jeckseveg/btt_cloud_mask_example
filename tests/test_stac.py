@@ -60,6 +60,10 @@ def test_downloaded_item_json_is_self_contained(catalog, tmp_path):
 
     (item,) = find_items(str(catalog), "event-a", platforms=["WV03"])
     download_assets(item, tmp_path / "out", ["ms_analytic"])
+    from pathlib import Path
+
     saved = pystac.Item.from_file(str(tmp_path / "out" / "ms-cloudy" / "item.json"))
-    assert saved.assets["ms_analytic"].get_absolute_href() == str(tmp_path / "out" / "ms-cloudy" / "ms-cloudy-ms_analytic.tif")
-    assert saved.assets["pan_analytic"].get_absolute_href().endswith("event-a/items/ms-cloudy-pan_analytic.tif")
+    local = Path(saved.assets["ms_analytic"].get_absolute_href())
+    assert local.resolve() == (tmp_path / "out" / "ms-cloudy" / "ms-cloudy-ms_analytic.tif").resolve()
+    remote = Path(saved.assets["pan_analytic"].get_absolute_href())
+    assert remote.resolve() == (tmp_path / "event-a" / "items" / "ms-cloudy-pan_analytic.tif").resolve()

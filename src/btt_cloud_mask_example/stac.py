@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import ssl
 from concurrent.futures import ThreadPoolExecutor
@@ -35,8 +36,15 @@ def _read_json(href):
     return json.loads(Path(href).read_text())
 
 
+def _join(base, href):
+    """Resolve a link relative to `base`: urljoin for URLs, os.path for local files (Windows-safe)."""
+    if base.startswith(("http://", "https://")) or href.startswith(("http://", "https://")):
+        return urljoin(base, href)
+    return os.path.normpath(os.path.join(os.path.dirname(base), href))
+
+
 def _links(obj, rel, base):
-    return [urljoin(base, link["href"]) for link in obj.get("links", []) if link["rel"] == rel]
+    return [_join(base, link["href"]) for link in obj.get("links", []) if link["rel"] == rel]
 
 
 def data_coverage(item):
@@ -118,7 +126,7 @@ def find_items(
 def _find_child(root, root_href, child_id, pool):
     """Return (href, json) of the root's child with id `child_id`, guessing from the path first."""
     hrefs = _links(root, "child", root_href)
-    likely = [h for h in hrefs if f"/{child_id}/" in h]
+    likely = [h for h in hrefs if f"/{child_id}/" in h.replace("\\", "/")]
     for candidates in (likely, hrefs):
         for href, child in zip(candidates, pool.map(_read_json, candidates)):
             if child.get("id") == child_id:
