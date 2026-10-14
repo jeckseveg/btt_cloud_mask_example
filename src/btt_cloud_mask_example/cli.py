@@ -68,9 +68,8 @@ def main(argv=None):
                 try:
                     item = _to_item(image)
                     path = Path(args.out) / f"{item.id.replace('/', '_')}_{model}.tif"
-                    mask, _ = create_mask(item, model, args.resolution, save_to=path)
-                    valid = mask[mask != 0]
-                    print(f"{path}  cloud {100 * (valid == 2).mean():.1f}%  shadow {100 * (valid == 3).mean():.1f}%")
+                    mask = create_mask(item, model, args.resolution, save_to=path)
+                    print(f"{path}  cloud {100 * mask.mean():.1f}%")
                 except CloudMaskError as err:
                     failed += 1
                     print(f"skipped {image}: {err}", file=sys.stderr)

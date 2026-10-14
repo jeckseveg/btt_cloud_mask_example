@@ -1,6 +1,8 @@
 # Detectors
 
-All detectors return the same classes: **0 nodata, 1 clear, 2 cloud, 3 cloud shadow**.
+Internally all detectors return the same classes: **0 nodata, 1 clear, 2 cloud, 3 cloud shadow**.
+`create_mask` reduces this to a binary numpy mask (`True` = cloud); the shadow and no-data
+classes are only used inside the package.
 By default they run at the **source resolution** of the item's `ms_analytic` asset (1.2–3.5 m)
 and write the mask on that grid. Use `--res 10` (CLI) or `res=10` (Python) to run coarser.
 

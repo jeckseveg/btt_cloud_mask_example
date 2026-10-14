@@ -1,7 +1,7 @@
 """Simple functions for finding Maxar images, loading them, and making cloud masks.
 
-Everything returns plain numpy arrays plus a rasterio profile (a dict with the map projection,
-pixel-to-map transform, nodata value, etc.), so it works with numpy, matplotlib and rasterio.
+Images come back as a numpy array plus a rasterio profile (a dict with the map projection,
+pixel-to-map transform, etc.); masks come back as a plain numpy True/False array.
 
 Typical use::
 
@@ -9,10 +9,10 @@ Typical use::
     import matplotlib.pyplot as plt
 
     urls = bcm.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
-    data, profile = bcm.load_image(urls[0])      # numpy (bands, height, width), reflectance 0-1
-    mask, mask_profile = bcm.create_mask(urls[0])  # numpy (height, width): 0 no data, 1 clear, 2 cloud, 3 shadow
+    data, profile = bcm.load_image(urls[0])   # numpy (bands, height, width), reflectance 0-1
+    mask = bcm.create_mask(urls[0])           # numpy bool (height, width): True = cloud
     plt.imshow(bcm.rgb(data))
-    bcm.compare(my_prediction, mask)             # how close is your model?
+    bcm.compare(my_prediction, mask)          # how close is your model?
 """
 
 from __future__ import annotations
@@ -29,18 +29,13 @@ from rasterio.warp import reproject
 
 from btt_cloud_mask_example.detectors import DETECTORS, get_detector
 from btt_cloud_mask_example.pipeline import load_item
-from btt_cloud_mask_example.raster import (
-    CLASS_NAMES, CLOUD, NODATA, REMOTE_GDAL_ENV, band_indexes, read_scene,
-)
+from btt_cloud_mask_example.raster import CLOUD, REMOTE_GDAL_ENV, band_indexes, read_scene
 from btt_cloud_mask_example.stac import find_items, normalize_url
 
 MAXAR_CATALOG = "https://maxar-opendata.s3.amazonaws.com/events/catalog.json"
 BROWSE_URL = "https://browser.moregeo.it/external/maxar-opendata.s3.amazonaws.com/events/catalog.json"
 DEFAULT_MODEL = "omnicloudmask"
 DEFAULT_BANDS = ("red", "green", "blue", "nir")
-
-#: Mask values and what they mean.
-CLASSES = {0: "no data", 1: "clear", 2: "cloud", 3: "cloud shadow"}
 
 # Friendly band names -> the STAC `eo:bands` common names Maxar uses.
 BAND_ALIASES = {"nir": "nir08", "nir1": "nir08", "nir2": "nir09", "red_edge": "rededge", "panchromatic": "pan"}
@@ -141,18 +136,16 @@ def create_mask(image, model=DEFAULT_MODEL, resolution=None, save_to=None, **opt
             need extra installs: pip install "btt_cloud_mask_example[all]".
         resolution: pixel size in metres. Default: the image's own resolution, so the mask lines
             up with `load_image(image)` pixel for pixel.
-        save_to: optional path to also save the mask as a GeoTIFF.
+        save_to: optional path to also save the mask as a GeoTIFF (1 = cloud, 0 = not cloud).
         **options: advanced model settings, e.g. thin_is_cloud=False or min_cloud_reflectance=0.
 
     Returns:
-        (mask, profile):
-        - mask: numpy uint8 array shaped (height, width): 0 no data, 1 clear, 2 cloud,
-          3 cloud shadow (see `CLASSES`).
-        - profile: rasterio profile dict, ready for `rasterio.open(path, "w", **profile)`.
+        mask: numpy bool array shaped (height, width). True = cloud; False = not cloud
+        (clear ground, cloud shadow, and the empty edges of the image).
 
     Example:
-        >>> mask, profile = create_mask(url)
-        >>> (mask == 2).mean()      # share of pixels that are cloud (including no-data pixels)
+        >>> mask = create_mask(url)
+        >>> mask.mean()      # share of pixels that are cloud
     """
     name = MODEL_ALIASES.get(model.lower(), model.lower())
     if name not in DETECTORS:
@@ -177,14 +170,14 @@ def create_mask(image, model=DEFAULT_MODEL, resolution=None, save_to=None, **opt
     if min(scene.valid.shape) < 32:
         raise CloudMaskError(f"At {scene.res:.1f} m the image is only {scene.valid.shape[1]}x{scene.valid.shape[0]} "
                              "pixels; the models need at least 32x32. Use a smaller resolution number.")
-    mask = detector.detect(scene)
-    profile = _profile(scene, count=1, dtype="uint8", nodata=NODATA, compress="deflate")
+    mask = detector.detect(scene) == CLOUD
     if save_to:
         Path(save_to).parent.mkdir(parents=True, exist_ok=True)
+        profile = _profile(scene, count=1, dtype="uint8", nodata=None, compress="deflate")
         with rasterio.open(save_to, "w", **profile) as dst:
-            dst.write(mask, 1)
-            dst.update_tags(1, **{f"class_{v}": n for v, n in CLASS_NAMES.items()})
-    return mask, profile
+            dst.write(mask.astype(np.uint8), 1)
+            dst.update_tags(1, values="1 = cloud, 0 = not cloud")
+    return mask
 
 
 # ----------------------------------------------------------------------------- comparing
@@ -193,11 +186,10 @@ def compare(prediction, reference):
     """Score a predicted cloud mask against a reference mask.
 
     Args:
-        prediction: your mask, as a numpy array shaped (height, width). Any of: True/False
-            (True = cloud); 0/1 (1 = cloud); probabilities from 0 to 1 (above 0.5 = cloud); or
-            the class values 0-3 from `create_mask`. A GeoTIFF path also works.
-        reference: the mask to compare against, usually the mask from `create_mask`
-            (class values 0-3; "no data" pixels are ignored). A GeoTIFF path also works.
+        prediction: your mask, as a numpy array shaped (height, width): True/False
+            (True = cloud), 0/1 (1 = cloud), or probabilities from 0 to 1 (above 0.5 = cloud).
+            A GeoTIFF path also works.
+        reference: the mask to compare against, usually from `create_mask`. Same options.
 
     Arrays must have the same shape: use the same `resolution` in `load_image` and
     `create_mask`. GeoTIFF files are lined up automatically.
@@ -206,8 +198,8 @@ def compare(prediction, reference):
         A dict with iou, precision, recall, f1 and accuracy for the cloud class, plus the
         cloud fraction of each mask and the number of pixels compared.
     """
-    pred, pred_geo = _prediction_cloud(prediction)
-    ref, ref_geo = _reference_cloud(reference)
+    pred, pred_geo = _binary(prediction, "prediction")
+    ref, ref_geo = _binary(reference, "reference")
     if pred[0].shape != ref[0].shape:
         if pred_geo and ref_geo:
             pred = _regrid(pred, pred_geo, ref[0].shape, ref_geo)
@@ -241,38 +233,20 @@ def _as_2d(arr, label):
     return arr
 
 
-def _prediction_cloud(mask):
-    """-> ((cloud bool, valid bool), (transform, crs) or None) for a student's prediction."""
+def _binary(mask, label):
+    """-> ((cloud bool, valid bool), (transform, crs) or None) for a binary mask."""
     geo = None
     if isinstance(mask, (str, Path)):
-        mask, geo, tags = _read_tif(mask)
-        if tags.get(f"class_{CLOUD}") == "cloud":  # one of our masks
-            return (mask == CLOUD, mask != NODATA), geo
-    arr = _as_2d(mask, "prediction")
+        mask, geo, _ = _read_tif(mask)
+    arr = _as_2d(mask, label)
     valid = np.ones(arr.shape, bool)
     if arr.dtype == bool:
         return (arr, valid), geo
     if np.issubdtype(arr.dtype, np.floating) and np.nanmin(arr) >= 0 and np.nanmax(arr) <= 1:
         return (arr > 0.5, ~np.isnan(arr)), geo
-    values = set(np.unique(arr).tolist())
-    if values <= {0, 1}:
+    if set(np.unique(arr).tolist()) <= {0, 1}:
         return (arr == 1, valid), geo
-    if values <= set(CLASSES):
-        return (arr == CLOUD, arr != NODATA), geo
-    raise CloudMaskError("Couldn't read the prediction: use True/False, 0/1 (1 = cloud), probabilities 0-1, "
-                         "or the class values 0 no data, 1 clear, 2 cloud, 3 shadow.")
-
-
-def _reference_cloud(mask):
-    """-> ((cloud bool, valid bool), geo) for a reference mask with class values 0-3."""
-    geo = None
-    if isinstance(mask, (str, Path)):
-        mask, geo, _ = _read_tif(mask)
-    arr = _as_2d(mask, "reference")
-    if not set(np.unique(arr).tolist()) <= set(CLASSES):
-        raise CloudMaskError("The reference should be a mask from create_mask (values 0 no data, 1 clear, "
-                             "2 cloud, 3 shadow). Did you swap prediction and reference?")
-    return (arr == CLOUD, arr != NODATA), geo
+    raise CloudMaskError(f"Couldn't read the {label}: use True/False, 0/1 (1 = cloud) or probabilities 0-1.")
 
 
 def _regrid(mask, src_geo, shape, dst_geo):
