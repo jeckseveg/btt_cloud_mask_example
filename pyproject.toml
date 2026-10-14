@@ -36,8 +36,8 @@ dev = ["pytest>=8", "build", "twine"]
 cloud-detect = "btt_cloud_mask_example.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/jeckseveg/example-cloud-detector-package"
-Issues = "https://github.com/jeckseveg/example-cloud-detector-package/issues"
+Homepage = "https://github.com/jeckseveg/btt_cloud_mask_example"
+Issues = "https://github.com/jeckseveg/btt_cloud_mask_example/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/btt_cloud_mask_example"]

@@ -123,8 +123,8 @@ The friendly functions above are built on a lower-level layer you can use direct
 The `cloud-detect fetch` and `cloud-detect run` commands expose the same layer.
 
 ```bash
-git clone https://github.com/jeckseveg/example-cloud-detector-package
-cd example-cloud-detector-package
+git clone https://github.com/jeckseveg/btt_cloud_mask_example
+cd btt_cloud_mask_example
 pip install -e ".[all,dev]"
 pytest
 python -m build && twine check dist/*
