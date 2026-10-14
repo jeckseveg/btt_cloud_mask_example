@@ -42,5 +42,9 @@ Issues = "https://github.com/jeckseveg/btt_cloud_mask_example/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["src/btt_cloud_mask_example"]
 
+# Only ship the package, its tests and the files PyPI needs; scripts/ and docs/ stay out.
+[tool.hatch.build.targets.sdist]
+include = ["src/btt_cloud_mask_example", "tests", "README.md", "LICENSE"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
