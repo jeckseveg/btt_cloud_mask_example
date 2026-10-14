@@ -79,12 +79,12 @@ with rasterio.open("mask.tif", "w", **mask_profile) as f:
 ### Useful options
 
 ```python
-bcm.find_images(event, n=10, min_cloud=10, max_cloud=60, sensors=["WV02", "WV03"])
-bcm.load_image(url, bands=["red", "green", "blue", "nir", "rededge"])   # pick bands
-bcm.load_image(url, resolution=10)                 # resample to 10 m pixels (smaller, faster)
-bcm.create_mask(url, resolution=10)                # ...and a mask on the same 10 m grid
-bcm.create_mask(url, model="ukis")                 # another model, for comparison
-bcm.create_mask(url, save_to="masks/one.tif")
+urls = bcm.find_images(event, n=10, min_cloud=10, max_cloud=60, sensors=["WV02", "WV03"])
+data, profile = bcm.load_image(url, bands=["red", "green", "blue", "nir", "rededge"])  # pick bands
+data, profile = bcm.load_image(url, resolution=10)   # resample to 10 m pixels (smaller, faster)
+mask, profile = bcm.create_mask(url, resolution=10)  # ...and a mask on the same 10 m grid
+mask, profile = bcm.create_mask(url, model="ukis")   # another model, for comparison
+mask, profile = bcm.create_mask(url, save_to="masks/one.tif")
 ```
 
 Event names (like `Hurricane-Ian-9-26-2022`) are listed in the
