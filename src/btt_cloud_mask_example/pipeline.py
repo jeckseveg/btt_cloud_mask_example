@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pystac
 
-from example_cloud_detector.detectors import get_detector
-from example_cloud_detector.raster import read_scene, to_source_grid, write_mask
+from btt_cloud_mask_example.detectors import get_detector
+from btt_cloud_mask_example.raster import read_scene, to_source_grid, write_mask
 
 
 def load_item(path_or_url):

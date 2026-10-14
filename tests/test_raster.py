@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import rasterio
 
-from example_cloud_detector.raster import pick_asset, read_scene, to_source_grid, write_mask
+from btt_cloud_mask_example.raster import pick_asset, read_scene, to_source_grid, write_mask
 
 
 def test_pick_asset_by_common_name(ms_item):

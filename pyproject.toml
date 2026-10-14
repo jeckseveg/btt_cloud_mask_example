@@ -33,14 +33,14 @@ all = ["btt_cloud_mask_example[ukis,cloudsen12]"]
 dev = ["pytest>=8", "build", "twine"]
 
 [project.scripts]
-cloud-detect = "example_cloud_detector.cli:main"
+cloud-detect = "btt_cloud_mask_example.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/jeckseveg/example-cloud-detector-package"
 Issues = "https://github.com/jeckseveg/example-cloud-detector-package/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/example_cloud_detector"]
+packages = ["src/btt_cloud_mask_example"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

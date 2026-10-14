@@ -2,13 +2,13 @@
 
 Typical use::
 
-    import example_cloud_detector as ecd
+    import btt_cloud_mask_example as bcm
 
-    urls = ecd.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
-    image = ecd.load_image(urls[0])          # pixels for your own model
-    mask = ecd.create_mask(urls[0])          # reference cloud mask (OmniCloudMask)
+    urls = bcm.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
+    image = bcm.load_image(urls[0])          # pixels for your own model
+    mask = bcm.create_mask(urls[0])          # reference cloud mask (OmniCloudMask)
     mask.plot(image)
-    ecd.compare(my_prediction, mask)         # how close is your model?
+    bcm.compare(my_prediction, mask)         # how close is your model?
 """
 
 from __future__ import annotations
@@ -24,12 +24,12 @@ from rasterio.enums import Resampling
 from rasterio.errors import RasterioIOError
 from rasterio.warp import reproject
 
-from example_cloud_detector.detectors import DETECTORS, get_detector
-from example_cloud_detector.pipeline import load_item
-from example_cloud_detector.raster import (
+from btt_cloud_mask_example.detectors import DETECTORS, get_detector
+from btt_cloud_mask_example.pipeline import load_item
+from btt_cloud_mask_example.raster import (
     CLASS_NAMES, CLEAR, CLOUD, NODATA, REMOTE_GDAL_ENV, SHADOW, band_indexes, read_scene, write_mask,
 )
-from example_cloud_detector.stac import find_items, normalize_url
+from btt_cloud_mask_example.stac import find_items, normalize_url
 
 MAXAR_CATALOG = "https://maxar-opendata.s3.amazonaws.com/events/catalog.json"
 BROWSE_URL = "https://browser.moregeo.it/external/maxar-opendata.s3.amazonaws.com/events/catalog.json"

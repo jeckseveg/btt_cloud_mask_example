@@ -6,7 +6,7 @@ import importlib
 
 import numpy as np
 
-from example_cloud_detector.raster import CLEAR, CLOUD, NODATA, Scene
+from btt_cloud_mask_example.raster import CLEAR, CLOUD, NODATA, Scene
 
 
 class Detector:

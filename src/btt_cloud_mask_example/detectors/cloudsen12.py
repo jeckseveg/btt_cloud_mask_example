@@ -5,8 +5,8 @@ Code LGPL-3.0, weights CC-BY-NC-4.0. Trained on Sentinel-2 L1C NIR/red/green/blu
 
 import numpy as np
 
-from example_cloud_detector.detectors.base import Detector
-from example_cloud_detector.raster import CLEAR, CLOUD, SHADOW
+from btt_cloud_mask_example.detectors.base import Detector
+from btt_cloud_mask_example.raster import CLEAR, CLOUD, SHADOW
 
 
 class CloudSEN12(Detector):

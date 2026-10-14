@@ -4,8 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from example_cloud_detector import __version__
-from example_cloud_detector.stac import download_assets, find_items
+from btt_cloud_mask_example import __version__
+from btt_cloud_mask_example.stac import download_assets, find_items
 
 DETECTOR_NAMES = ["omnicloudmask", "ukis", "cloudsen12"]
 
@@ -56,7 +56,7 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     if args.command in ("find", "mask"):
-        from example_cloud_detector.api import CloudMaskError, create_mask, find_images
+        from btt_cloud_mask_example.api import CloudMaskError, create_mask, find_images
 
         try:
             if args.command == "find":
@@ -76,8 +76,8 @@ def main(argv=None):
         except CloudMaskError as err:
             sys.exit(str(err))
     if args.command == "run":
-        from example_cloud_detector.detectors import get_detector
-        from example_cloud_detector.pipeline import detect_item
+        from btt_cloud_mask_example.detectors import get_detector
+        from btt_cloud_mask_example.pipeline import detect_item
 
         kwargs = dict(res=args.res, min_cloud_reflectance=args.min_cloud_reflectance)
         if args.detector != "ukis":

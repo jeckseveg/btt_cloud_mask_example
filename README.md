@@ -26,24 +26,24 @@ The first mask you make downloads OmniCloudMask's model weights (about 55 MB).
 ## Quickstart
 
 ```python
-import example_cloud_detector as ecd
+import btt_cloud_mask_example as bcm
 
 # 1. Find some cloudy images from a disaster event
-urls = ecd.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
+urls = bcm.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
 
 # 2. Load an image: reflectance values from 0 to 1, shaped (bands, height, width)
-image = ecd.load_image(urls[0])              # bands: red, green, blue, nir
+image = bcm.load_image(urls[0])              # bands: red, green, blue, nir
 image.data.shape                             # e.g. (4, 2868, 2868)
 image.plot()
 
 # 3. Make a reference cloud mask for the same image
-mask = ecd.create_mask(urls[0])
+mask = bcm.create_mask(urls[0])
 mask.cloud_fraction                          # e.g. 0.37 (share of pixels that are cloud)
 mask.plot(image)                             # image and mask side by side
 
 # 4. Compare your model's prediction against the reference
 my_prediction = my_model(image.data)         # True/False, 0/1 or probabilities, shaped (height, width)
-ecd.compare(my_prediction, mask)
+bcm.compare(my_prediction, mask)
 # e.g. {'iou': 0.71, 'precision': 0.93, 'recall': 0.75, 'f1': 0.83, 'accuracy': 0.91, ...}
 ```
 
@@ -67,12 +67,12 @@ GeoTIFF that opens in QGIS.
 ### Useful options
 
 ```python
-ecd.find_images(event, n=10, min_cloud=10, max_cloud=60, sensors=["WV02", "WV03"])
-ecd.load_image(url, bands=["red", "green", "blue", "nir", "rededge"])   # pick bands
-ecd.load_image(url, resolution=10)                 # resample to 10 m pixels (smaller, faster)
-ecd.create_mask(url, resolution=10)                # ...and a mask on the same 10 m grid
-ecd.create_mask(url, model="ukis")                 # another model, for comparison
-ecd.create_mask(url, save_to="masks/one.tif")
+bcm.find_images(event, n=10, min_cloud=10, max_cloud=60, sensors=["WV02", "WV03"])
+bcm.load_image(url, bands=["red", "green", "blue", "nir", "rededge"])   # pick bands
+bcm.load_image(url, resolution=10)                 # resample to 10 m pixels (smaller, faster)
+bcm.create_mask(url, resolution=10)                # ...and a mask on the same 10 m grid
+bcm.create_mask(url, model="ukis")                 # another model, for comparison
+bcm.create_mask(url, save_to="masks/one.tif")
 ```
 
 Event names (like `Hurricane-Ian-9-26-2022`) are listed in the
@@ -118,7 +118,7 @@ Maxar Open Data imagery is licensed [CC-BY-NC-4.0](https://creativecommons.org/l
 ## For developers
 
 The friendly functions above are built on a lower-level layer you can use directly:
-`example_cloud_detector.stac` (search and download from any static STAC catalog),
+`btt_cloud_mask_example.stac` (search and download from any static STAC catalog),
 `.raster` (reading bands, writing masks), `.detectors` (the model wrappers) and `.pipeline`.
 The `cloud-detect fetch` and `cloud-detect run` commands expose the same layer.
 

@@ -3,7 +3,7 @@ import datetime
 import pystac
 import pytest
 
-from example_cloud_detector.stac import data_coverage, download_assets, find_items, normalize_url
+from btt_cloud_mask_example.stac import data_coverage, download_assets, find_items, normalize_url
 
 
 def test_data_coverage():
