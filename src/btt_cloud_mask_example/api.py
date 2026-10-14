@@ -1,19 +1,22 @@
 """Simple functions for finding Maxar images, loading them, and making cloud masks.
 
+Everything returns plain numpy arrays plus a rasterio profile (a dict with the map projection,
+pixel-to-map transform, nodata value, etc.), so it works with numpy, matplotlib and rasterio.
+
 Typical use::
 
     import btt_cloud_mask_example as bcm
+    import matplotlib.pyplot as plt
 
     urls = bcm.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
-    image = bcm.load_image(urls[0])          # pixels for your own model
-    mask = bcm.create_mask(urls[0])          # reference cloud mask (OmniCloudMask)
-    mask.plot(image)
-    bcm.compare(my_prediction, mask)         # how close is your model?
+    data, profile = bcm.load_image(urls[0])      # numpy (bands, height, width), reflectance 0-1
+    mask, mask_profile = bcm.create_mask(urls[0])  # numpy (height, width): 0 no data, 1 clear, 2 cloud, 3 shadow
+    plt.imshow(bcm.rgb(data))
+    bcm.compare(my_prediction, mask)             # how close is your model?
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.error import HTTPError
 
@@ -27,7 +30,7 @@ from rasterio.warp import reproject
 from btt_cloud_mask_example.detectors import DETECTORS, get_detector
 from btt_cloud_mask_example.pipeline import load_item
 from btt_cloud_mask_example.raster import (
-    CLASS_NAMES, CLEAR, CLOUD, NODATA, REMOTE_GDAL_ENV, SHADOW, band_indexes, read_scene, write_mask,
+    CLASS_NAMES, CLOUD, NODATA, REMOTE_GDAL_ENV, band_indexes, read_scene,
 )
 from btt_cloud_mask_example.stac import find_items, normalize_url
 
@@ -35,6 +38,9 @@ MAXAR_CATALOG = "https://maxar-opendata.s3.amazonaws.com/events/catalog.json"
 BROWSE_URL = "https://browser.moregeo.it/external/maxar-opendata.s3.amazonaws.com/events/catalog.json"
 DEFAULT_MODEL = "omnicloudmask"
 DEFAULT_BANDS = ("red", "green", "blue", "nir")
+
+#: Mask values and what they mean.
+CLASSES = {0: "no data", 1: "clear", 2: "cloud", 3: "cloud shadow"}
 
 # Friendly band names -> the STAC `eo:bands` common names Maxar uses.
 BAND_ALIASES = {"nir": "nir08", "nir1": "nir08", "nir2": "nir09", "red_edge": "rededge", "panchromatic": "pan"}
@@ -81,72 +87,6 @@ def find_images(event, n=5, min_cloud=None, max_cloud=None, sensors=None, min_co
 
 # ----------------------------------------------------------------------------- images
 
-@dataclass(repr=False)
-class Image:
-    """Pixels of one image as reflectance (0-1), plus where they are on Earth.
-
-    Attributes:
-        data: numpy array shaped (bands, height, width), float32 reflectance.
-        bands: band names, in the same order as `data`.
-        valid: (height, width) True where there is image data (False at the empty edges).
-        resolution: pixel size in metres.
-        crs, transform: map projection and pixel-to-map transform (for saving GeoTIFFs).
-    """
-
-    data: np.ndarray
-    bands: list
-    valid: np.ndarray
-    resolution: float
-    crs: object
-    transform: object
-    item: pystac.Item = field(default=None)
-
-    @property
-    def url(self):
-        return self.item.get_self_href()
-
-    @property
-    def sensor(self):
-        return self.item.properties.get("platform")
-
-    @property
-    def shape(self):
-        return self.valid.shape
-
-    def band(self, name):
-        """One band as a (height, width) array, e.g. `image.band("nir")`."""
-        names = [BAND_ALIASES.get(b, b) for b in self.bands]
-        key = BAND_ALIASES.get(name.lower(), name.lower())
-        if key not in names:
-            raise CloudMaskError(f"This image has no '{name}' band. It has: {', '.join(self.bands)}")
-        return self.data[names.index(key)]
-
-    def rgb(self):
-        """A (height, width, 3) array scaled 0-1 for display (grayscale if there is no colour)."""
-        names = [BAND_ALIASES.get(b, b) for b in self.bands]
-        if all(c in names for c in ("red", "green", "blue")):
-            arr = np.stack([self.band(c) for c in ("red", "green", "blue")], axis=-1)
-        else:
-            arr = np.repeat(self.data[0][..., None], 3, axis=-1)
-        values = arr[self.valid]
-        lo, hi = (np.percentile(values, [2, 98]) if values.size else (0, 1))
-        return np.clip((arr - lo) / max(hi - lo, 1e-6), 0, 1) * self.valid[..., None]
-
-    def plot(self, ax=None):
-        """Show the image (true colour where available)."""
-        import matplotlib.pyplot as plt
-
-        ax = ax or plt.subplots(figsize=(6, 6))[1]
-        ax.imshow(self.rgb())
-        ax.set_title(f"{self.sensor} {self.item.id}", fontsize=9)
-        ax.axis("off")
-        return ax
-
-    def __repr__(self):
-        return (f"Image(sensor={self.sensor}, bands={self.bands}, shape={self.shape}, "
-                f"resolution={self.resolution:.2f} m, url={self.url})")
-
-
 def load_image(image, bands=DEFAULT_BANDS, resolution=None):
     """Load an image's pixels as reflectance values between 0 and 1.
 
@@ -158,104 +98,39 @@ def load_image(image, bands=DEFAULT_BANDS, resolution=None):
             Use the same value in `create_mask` so the two line up pixel for pixel.
 
     Returns:
-        An `Image`. `image.data` is a numpy array shaped (bands, height, width).
+        (data, profile):
+        - data: numpy float32 array shaped (bands, height, width), in the order of `bands`.
+          Pixels that are 0 in every band are "no data" (the empty edges of an image).
+        - profile: rasterio profile dict (crs, transform, width, height, count, dtype, nodata),
+          ready for `rasterio.open(path, "w", **profile)`.
 
     Example:
-        >>> img = load_image(url)
-        >>> img.band("nir").mean()
+        >>> data, profile = load_image(url)
+        >>> nir = data[3]
     """
     item = _to_item(image)
     wanted = [BAND_ALIASES.get(b.lower(), b.lower()) for b in bands]
     if wanted != ["pan"]:
         _check_bands(item, wanted, list(bands))
     scene = _read(lambda: read_scene(item, wanted, resolution), item)
-    return Image(data=scene.data, bands=list(bands), valid=scene.valid, resolution=scene.res,
-                 crs=scene.crs, transform=scene.transform, item=item)
+    return scene.data, _profile(scene, count=len(wanted), dtype="float32")
+
+
+def rgb(data):
+    """Turn image data into an (height, width, 3) array for `plt.imshow`.
+
+    Uses the first three bands as red, green, blue (the default `load_image` order), or
+    grey for a single band, and stretches brightness so the picture is easy to see.
+    """
+    data = np.asarray(data)
+    arr = np.moveaxis(data[:3], 0, -1) if data.shape[0] >= 3 else np.repeat(data[0][..., None], 3, axis=-1)
+    valid = data.any(axis=0)
+    values = arr[valid]
+    lo, hi = np.percentile(values, [2, 98]) if values.size else (0, 1)
+    return np.clip((arr - lo) / max(hi - lo, 1e-6), 0, 1) * valid[..., None]
 
 
 # ----------------------------------------------------------------------------- masks
-
-@dataclass(repr=False)
-class CloudMask:
-    """A cloud mask: one number per pixel.
-
-    0 = no data, 1 = clear, 2 = cloud, 3 = cloud shadow.
-
-    Attributes:
-        data: numpy uint8 array shaped (height, width).
-        model: the model that made it.
-        resolution: pixel size in metres.
-        crs, transform: map projection and pixel-to-map transform.
-    """
-
-    data: np.ndarray
-    model: str
-    resolution: float
-    crs: object
-    transform: object
-    item: pystac.Item = field(default=None)
-
-    CLASSES = {NODATA: "no data", CLEAR: "clear", CLOUD: "cloud", SHADOW: "cloud shadow"}
-
-    @property
-    def url(self):
-        return self.item.get_self_href() if self.item else None
-
-    @property
-    def shape(self):
-        return self.data.shape
-
-    @property
-    def cloud(self):
-        """True where there is cloud."""
-        return self.data == CLOUD
-
-    def _fraction(self, cls):
-        valid = self.data != NODATA
-        return float((self.data[valid] == cls).mean()) if valid.any() else 0.0
-
-    @property
-    def cloud_fraction(self):
-        """Share of image pixels that are cloud (0-1)."""
-        return self._fraction(CLOUD)
-
-    @property
-    def shadow_fraction(self):
-        return self._fraction(SHADOW)
-
-    @property
-    def clear_fraction(self):
-        return self._fraction(CLEAR)
-
-    def save(self, path):
-        """Save as a GeoTIFF that opens in QGIS/rasterio. Returns the path."""
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return write_mask(path, self.data, self.transform, self.crs)
-
-    def plot(self, image=None, ax=None):
-        """Show the mask, next to `image` (from `load_image`) if you pass one."""
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import ListedColormap
-        from matplotlib.patches import Patch
-
-        colors = ["#000000", "#2b8a3e", "#f1f3f5", "#7048e8"]
-        if image is not None:
-            fig, (ax_img, ax) = plt.subplots(1, 2, figsize=(12, 6))
-            image.plot(ax_img)
-        ax = ax or plt.subplots(figsize=(6, 6))[1]
-        ax.imshow(self.data, cmap=ListedColormap(colors), vmin=0, vmax=3, interpolation="nearest")
-        ax.legend(handles=[Patch(color=c, label=self.CLASSES[i]) for i, c in enumerate(colors)],
-                  loc="lower right", fontsize=8)
-        ax.set_title(f"{self.model}: {100 * self.cloud_fraction:.0f}% cloud", fontsize=9)
-        ax.axis("off")
-        return ax
-
-    def __repr__(self):
-        return (f"CloudMask(model={self.model}, cloud={100 * self.cloud_fraction:.1f}%, "
-                f"shadow={100 * self.shadow_fraction:.1f}%, clear={100 * self.clear_fraction:.1f}%, "
-                f"shape={self.shape}, resolution={self.resolution:.2f} m)")
-
 
 def create_mask(image, model=DEFAULT_MODEL, resolution=None, save_to=None, **options):
     """Make a cloud mask for an image with a pretrained model.
@@ -270,12 +145,14 @@ def create_mask(image, model=DEFAULT_MODEL, resolution=None, save_to=None, **opt
         **options: advanced model settings, e.g. thin_is_cloud=False or min_cloud_reflectance=0.
 
     Returns:
-        A `CloudMask`. `mask.data` is a numpy array: 0 no data, 1 clear, 2 cloud, 3 cloud shadow.
+        (mask, profile):
+        - mask: numpy uint8 array shaped (height, width): 0 no data, 1 clear, 2 cloud,
+          3 cloud shadow (see `CLASSES`).
+        - profile: rasterio profile dict, ready for `rasterio.open(path, "w", **profile)`.
 
     Example:
-        >>> mask = create_mask(url)
-        >>> mask.cloud_fraction
-        0.37
+        >>> mask, profile = create_mask(url)
+        >>> (mask == 2).mean()      # share of pixels that are cloud (including no-data pixels)
     """
     name = MODEL_ALIASES.get(model.lower(), model.lower())
     if name not in DETECTORS:
@@ -300,11 +177,14 @@ def create_mask(image, model=DEFAULT_MODEL, resolution=None, save_to=None, **opt
     if min(scene.valid.shape) < 32:
         raise CloudMaskError(f"At {scene.res:.1f} m the image is only {scene.valid.shape[1]}x{scene.valid.shape[0]} "
                              "pixels; the models need at least 32x32. Use a smaller resolution number.")
-    mask = CloudMask(data=detector.detect(scene), model=name, resolution=scene.res, crs=scene.crs,
-                     transform=scene.transform, item=item)
+    mask = detector.detect(scene)
+    profile = _profile(scene, count=1, dtype="uint8", nodata=NODATA, compress="deflate")
     if save_to:
-        mask.save(save_to)
-    return mask
+        Path(save_to).parent.mkdir(parents=True, exist_ok=True)
+        with rasterio.open(save_to, "w", **profile) as dst:
+            dst.write(mask, 1)
+            dst.update_tags(1, **{f"class_{v}": n for v, n in CLASS_NAMES.items()})
+    return mask, profile
 
 
 # ----------------------------------------------------------------------------- comparing
@@ -313,20 +193,21 @@ def compare(prediction, reference):
     """Score a predicted cloud mask against a reference mask.
 
     Args:
-        prediction: your mask. Any of: a True/False array (True = cloud); a 0/1 array (1 = cloud);
-            a probability array (above 0.5 = cloud); a `CloudMask`; or a path to a GeoTIFF.
-        reference: the mask to compare against, usually from `create_mask`. Same options.
-            "No data" pixels in a `CloudMask` reference are ignored.
+        prediction: your mask, as a numpy array shaped (height, width). Any of: True/False
+            (True = cloud); 0/1 (1 = cloud); probabilities from 0 to 1 (above 0.5 = cloud); or
+            the class values 0-3 from `create_mask`. A GeoTIFF path also works.
+        reference: the mask to compare against, usually the mask from `create_mask`
+            (class values 0-3; "no data" pixels are ignored). A GeoTIFF path also works.
 
-    Arrays must have the same shape (use the same `resolution` in `load_image` and
-    `create_mask`). Masks with map information (CloudMask, GeoTIFF) are lined up automatically.
+    Arrays must have the same shape: use the same `resolution` in `load_image` and
+    `create_mask`. GeoTIFF files are lined up automatically.
 
     Returns:
         A dict with iou, precision, recall, f1 and accuracy for the cloud class, plus the
         cloud fraction of each mask and the number of pixels compared.
     """
-    pred, pred_geo = _as_cloud(prediction, "prediction")
-    ref, ref_geo = _as_cloud(reference, "reference")
+    pred, pred_geo = _prediction_cloud(prediction)
+    ref, ref_geo = _reference_cloud(reference)
     if pred[0].shape != ref[0].shape:
         if pred_geo and ref_geo:
             pred = _regrid(pred, pred_geo, ref[0].shape, ref_geo)
@@ -346,32 +227,52 @@ def compare(prediction, reference):
                 pixels=n)
 
 
-def _as_cloud(mask, label):
-    """-> ((cloud bool array, valid bool array), (transform, crs) or None)."""
-    if isinstance(mask, CloudMask):
-        return (mask.data == CLOUD, mask.data != NODATA), (mask.transform, mask.crs)
-    if isinstance(mask, (str, Path)):
-        with rasterio.open(mask) as ds:
-            arr, geo, tags = ds.read(1), (ds.transform, ds.crs), ds.tags(1)
-        if tags.get(f"class_{CLOUD}") != "cloud" and set(np.unique(arr)) <= {0, 1}:  # not one of our masks
-            return (arr == 1, np.ones(arr.shape, bool)), geo
-        return (arr == CLOUD, arr != NODATA), geo
-    arr = np.asarray(mask)
+def _read_tif(path):
+    with rasterio.open(path) as ds:
+        return ds.read(1), (ds.transform, ds.crs), ds.tags(1)
+
+
+def _as_2d(arr, label):
+    arr = np.asarray(arr)
     if arr.ndim == 3 and arr.shape[0] == 1:
         arr = arr[0]
     if arr.ndim != 2:
         raise CloudMaskError(f"The {label} should be a 2-D (height, width) array; got shape {arr.shape}.")
+    return arr
+
+
+def _prediction_cloud(mask):
+    """-> ((cloud bool, valid bool), (transform, crs) or None) for a student's prediction."""
+    geo = None
+    if isinstance(mask, (str, Path)):
+        mask, geo, tags = _read_tif(mask)
+        if tags.get(f"class_{CLOUD}") == "cloud":  # one of our masks
+            return (mask == CLOUD, mask != NODATA), geo
+    arr = _as_2d(mask, "prediction")
     valid = np.ones(arr.shape, bool)
     if arr.dtype == bool:
-        return (arr, valid), None
+        return (arr, valid), geo
     if np.issubdtype(arr.dtype, np.floating) and np.nanmin(arr) >= 0 and np.nanmax(arr) <= 1:
-        return (arr > 0.5, valid & ~np.isnan(arr)), None
-    if set(np.unique(arr)) <= {0, 1}:
-        return (arr == 1, valid), None
-    if set(np.unique(arr)) <= set(CLASS_NAMES):
-        return (arr == CLOUD, arr != NODATA), None
-    raise CloudMaskError(f"Couldn't read the {label}: use True/False, 0/1 (1 = cloud), probabilities 0-1, "
-                         "or the class codes 0 no data, 1 clear, 2 cloud, 3 shadow.")
+        return (arr > 0.5, ~np.isnan(arr)), geo
+    values = set(np.unique(arr).tolist())
+    if values <= {0, 1}:
+        return (arr == 1, valid), geo
+    if values <= set(CLASSES):
+        return (arr == CLOUD, arr != NODATA), geo
+    raise CloudMaskError("Couldn't read the prediction: use True/False, 0/1 (1 = cloud), probabilities 0-1, "
+                         "or the class values 0 no data, 1 clear, 2 cloud, 3 shadow.")
+
+
+def _reference_cloud(mask):
+    """-> ((cloud bool, valid bool), geo) for a reference mask with class values 0-3."""
+    geo = None
+    if isinstance(mask, (str, Path)):
+        mask, geo, _ = _read_tif(mask)
+    arr = _as_2d(mask, "reference")
+    if not set(np.unique(arr).tolist()) <= set(CLASSES):
+        raise CloudMaskError("The reference should be a mask from create_mask (values 0 no data, 1 clear, "
+                             "2 cloud, 3 shadow). Did you swap prediction and reference?")
+    return (arr == CLOUD, arr != NODATA), geo
 
 
 def _regrid(mask, src_geo, shape, dst_geo):
@@ -386,9 +287,14 @@ def _regrid(mask, src_geo, shape, dst_geo):
 
 # ----------------------------------------------------------------------------- helpers
 
+def _profile(scene, **extra):
+    height, width = scene.valid.shape
+    profile = dict(driver="GTiff", width=width, height=height, crs=scene.crs, transform=scene.transform, nodata=0)
+    profile.update(extra)
+    return profile
+
+
 def _to_item(image):
-    if isinstance(image, (Image, CloudMask)):
-        return image.item
     if isinstance(image, pystac.Item):
         return image
     text = normalize_url(str(image))
@@ -410,9 +316,8 @@ def _check_bands(item, wanted, asked):
     available = band_indexes(item, "ms_analytic")
     missing = [a for a, w in zip(asked, wanted) if w not in available]
     if missing:
-        names = [b for b in available]
         raise CloudMaskError(f"This {item.properties.get('platform')} image has no {', '.join(missing)} band. "
-                             f"It has: {', '.join(names)}")
+                             f"It has: {', '.join(available)}")
 
 
 def _asset_resolution(item, key):

@@ -56,18 +56,21 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     if args.command in ("find", "mask"):
-        from btt_cloud_mask_example.api import CloudMaskError, create_mask, find_images
+        from btt_cloud_mask_example.api import MODEL_ALIASES, CloudMaskError, _to_item, create_mask, find_images
 
         try:
             if args.command == "find":
                 print("\n".join(find_images(args.event, args.n, args.min_cloud, args.max_cloud)))
                 return
             failed = 0
+            model = MODEL_ALIASES.get(args.model.lower(), args.model.lower())
             for image in args.images:
                 try:
-                    m = create_mask(image, args.model, args.resolution)
-                    path = m.save(Path(args.out) / f"{m.item.id.replace('/', '_')}_{m.model}.tif")
-                    print(f"{path}  cloud {100 * m.cloud_fraction:.1f}%  shadow {100 * m.shadow_fraction:.1f}%")
+                    item = _to_item(image)
+                    path = Path(args.out) / f"{item.id.replace('/', '_')}_{model}.tif"
+                    mask, _ = create_mask(item, model, args.resolution, save_to=path)
+                    valid = mask[mask != 0]
+                    print(f"{path}  cloud {100 * (valid == 2).mean():.1f}%  shadow {100 * (valid == 3).mean():.1f}%")
                 except CloudMaskError as err:
                     failed += 1
                     print(f"skipped {image}: {err}", file=sys.stderr)

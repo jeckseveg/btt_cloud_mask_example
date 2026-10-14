@@ -25,34 +25,39 @@ The first mask you make downloads OmniCloudMask's model weights (about 55 MB).
 
 ## Quickstart
 
+Everything comes back as plain **numpy arrays** plus a **rasterio profile** (a dict with the
+map projection, pixel size and so on), so it works with numpy, matplotlib and rasterio as usual.
+
 ```python
 import btt_cloud_mask_example as bcm
+import matplotlib.pyplot as plt
 
 # 1. Find some cloudy images from a disaster event
 urls = bcm.find_images("Hurricane-Ian-9-26-2022", n=3, min_cloud=20)
 
 # 2. Load an image: reflectance values from 0 to 1, shaped (bands, height, width)
-image = bcm.load_image(urls[0])              # bands: red, green, blue, nir
-image.data.shape                             # e.g. (4, 2868, 2868)
-image.plot()
+data, profile = bcm.load_image(urls[0])      # bands, in order: red, green, blue, nir
+data.shape                                   # e.g. (4, 2868, 2868)
+plt.imshow(bcm.rgb(data))                    # bcm.rgb makes a viewable colour picture
 
 # 3. Make a reference cloud mask for the same image
-mask = bcm.create_mask(urls[0])
-mask.cloud_fraction                          # e.g. 0.37 (share of pixels that are cloud)
-mask.plot(image)                             # image and mask side by side
+mask, mask_profile = bcm.create_mask(urls[0])
+valid = mask != 0                            # ignore the empty edges
+(mask[valid] == 2).mean()                    # e.g. 0.37: share of the image that is cloud
+plt.imshow(mask, vmin=0, vmax=3)
 
 # 4. Compare your model's prediction against the reference
-my_prediction = my_model(image.data)         # True/False, 0/1 or probabilities, shaped (height, width)
+my_prediction = my_model(data)               # True/False, 0/1 or probabilities, shaped (height, width)
 bcm.compare(my_prediction, mask)
 # e.g. {'iou': 0.71, 'precision': 0.93, 'recall': 0.75, 'f1': 0.83, 'accuracy': 0.91, ...}
 ```
 
-`load_image` and `create_mask` use the same pixel grid, so `image.data[:, y, x]` and
-`mask.data[y, x]` are the same spot on the ground.
+`load_image` and `create_mask` use the same pixel grid, so `data[:, y, x]` and `mask[y, x]` are
+the same spot on the ground.
 
 ### What's in a mask
 
-`mask.data` is a numpy array with one number per pixel:
+`mask` is a numpy array with one number per pixel (also available as `bcm.CLASSES`):
 
 | Value | Meaning |
 |------:|---------|
@@ -61,8 +66,15 @@ bcm.compare(my_prediction, mask)
 | 2 | cloud |
 | 3 | cloud shadow |
 
-`mask.cloud` gives a True/False array of just the cloud. `mask.save("mask.tif")` writes a
-GeoTIFF that opens in QGIS.
+`mask == 2` gives a True/False array of just the cloud. To save a GeoTIFF that opens in QGIS,
+use the profile with rasterio (or pass `save_to="mask.tif"` to `create_mask`):
+
+```python
+import rasterio
+
+with rasterio.open("mask.tif", "w", **mask_profile) as f:
+    f.write(mask, 1)
+```
 
 ### Useful options
 
