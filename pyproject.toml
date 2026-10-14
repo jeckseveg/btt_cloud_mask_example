@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "btt_cloud_mask_example"
-version = "0.1.0"
-description = "Reference cloud masks for Maxar Open Data imagery from prebuilt models (OmniCloudMask, ukis-csmask, CloudSEN12)."
+version = "0.1.1"
+description = "Reference cloud masks for Maxar satellite images, so students can check their own cloud-detection models."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

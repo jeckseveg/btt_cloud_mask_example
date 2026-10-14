@@ -8,7 +8,7 @@
     bcm.compare(my_prediction, mask)    # iou, precision, recall, f1, accuracy
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from btt_cloud_mask_example.api import (  # noqa: E402
     CloudMask,
