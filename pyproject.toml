@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "example-cloud-detector"
+version = "0.1.0"
+description = "Prebuilt cloud detectors that read imagery from a public STAC collection and write cloud masks."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Jack Savage" }]
+keywords = ["cloud detection", "remote sensing", "stac", "satellite imagery"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pystac-client>=0.8",
+    "rasterio>=1.3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "build", "twine"]
+
+[project.scripts]
+cloud-detect = "example_cloud_detector.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OWNER/example-cloud-detector-package"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/example_cloud_detector"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
