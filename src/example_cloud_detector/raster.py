@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import rasterio
@@ -37,6 +37,10 @@ class Scene:
 
     def band(self, name):
         return self.data[self.bands.index(name)]
+
+    def select(self, bands):
+        """Return a copy of this scene with only `bands`, in that order (for sharing one read)."""
+        return replace(self, data=np.stack([self.band(b) for b in bands]), bands=list(bands))
 
 
 # GDAL settings for reading remote COGs: fewer, larger HTTP range requests.
